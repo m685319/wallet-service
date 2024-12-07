@@ -1,86 +1,104 @@
 package com.example.wallet_service.controller;
 
-import com.example.wallet_service.dto.WalletDTO;
 import com.example.wallet_service.model.Wallet;
 import com.example.wallet_service.repository.WalletRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@ExtendWith(SpringExtension.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-public class WalletControllerTest {
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+class WalletControllerTest {
 
     @Autowired
-    private TestRestTemplate restTemplate;
+    private MockMvc mockMvc;
 
-    @Autowired
+    @MockitoSpyBean
     private WalletRepository walletRepository;
 
-    private UUID walletId;
+    @Test
+    void testUpdateBalance_depositSuccess() throws Exception {
+        // when
+        var jsonBody = """
+                {
+                    "walletId": "123e4567-e89b-12d3-a456-426614174000",
+                    "operationType": "DEPOSIT",
+                    "amount": 1000
+                }
+                """;
 
-    @BeforeEach
-    void setUp() {
-        Wallet wallet = new Wallet();
-        wallet.setBalance(1000L);
-        wallet = walletRepository.save(wallet);
-        walletId = wallet.getId();
+        // then
+        mockMvc.perform(post("/api/v1/wallets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(2000))
+                .andExpect(jsonPath("$.walletId").value("123e4567-e89b-12d3-a456-426614174000"));
+        verify(walletRepository).findById(UUID.fromString("123e4567-e89b-12d3-a456-426614174000"));
+        verify(walletRepository).save(any(Wallet.class));
     }
 
     @Test
-    void shouldReturnWalletBalance() {
+    void testUpdateBalance_withdrawSuccess() throws Exception {
+        String jsonBody = """
+                {
+                    "walletId": "123e4567-e89b-12d3-a456-426614174000",
+                    "operationType": "WITHDRAW",
+                    "amount": 500
+                }
+                """;
 
-        ResponseEntity<WalletDTO> response = restTemplate.getForEntity("/api/v1/wallets/{id}", WalletDTO.class, walletId);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-
-        WalletDTO walletDTO = response.getBody();
-        assertThat(walletDTO).isNotNull();
-        assertThat(walletDTO.getBalance()).isEqualTo(1000L);
+        mockMvc.perform(post("/api/v1/wallets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(500))
+                .andExpect(jsonPath("$.walletId").value("123e4567-e89b-12d3-a456-426614174000"));
     }
 
     @Test
-    void shouldUpdateWalletBalanceWithDeposit() {
-
-        WalletDTO request = new WalletDTO();
-        request.setWalletId(walletId);
-        request.setOperationType("DEPOSIT");
-        request.setAmount(500L);
-
-        ResponseEntity<String> response = restTemplate.postForEntity("/api/v1/wallets", request, String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isEqualTo("Operation completed successfully");
-
-        Wallet updatedWallet = walletRepository.findById(walletId).orElseThrow();
-        assertThat(updatedWallet.getBalance()).isEqualTo(1500L);
+    void testGetBalance_success() throws Exception {
+        mockMvc.perform(get("/api/v1/wallets/{id}", "123e4567-e89b-12d3-a456-426614174000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(1000));
     }
 
     @Test
-    void shouldUpdateWalletBalanceWithWithdraw() {
+    void testGetWallet_notFound() throws Exception {
+        var nonExistWalletId = "910dda0b-8219-4325-85f5-dbc9c2f158e4";
+        mockMvc.perform(get("/api/v1/wallets/{id}", nonExistWalletId))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string("Wallet not found: " + nonExistWalletId));
+    }
 
-        WalletDTO request = new WalletDTO();
-        request.setWalletId(walletId);
-        request.setOperationType("WITHDRAW");
-        request.setAmount(300L);
+    @Test
+    void testInsufficientFunds_withdraw() throws Exception {
+        String jsonBody = """
+                {
+                    "walletId": "123e4567-e89b-12d3-a456-426614174000",
+                    "operationType": "WITHDRAW",
+                    "amount": 1500
+                }
+                """;
 
-        ResponseEntity<String> response = restTemplate.postForEntity("/api/v1/wallets", request, String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isEqualTo("Operation completed successfully");
-
-        Wallet updatedWallet = walletRepository.findById(walletId).orElseThrow();
-        assertThat(updatedWallet.getBalance()).isEqualTo(700L);
+        mockMvc.perform(post("/api/v1/wallets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("Insufficient balance"));
     }
 }

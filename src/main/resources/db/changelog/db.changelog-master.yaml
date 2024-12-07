@@ -17,3 +17,9 @@ databaseChangeLog:
                   type: BIGINT
                   constraints:
                     nullable: false
+  - changeSet:
+      id: 2
+      author: marii
+      sqlFile:
+        path: scripts/data.sql
+        relativeToChangelogFile: true
