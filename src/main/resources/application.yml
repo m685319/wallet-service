@@ -1,16 +1,10 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/wallet_db
+    url: jdbc:postgresql://localhost:5433/wallet_db
     username: postgres
     password: postgres
-  jpa:
-    hibernate:
-      ddl-auto: create
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
   liquibase:
-    enabled: false
+    change-log: classpath:db/changelog/db.changelog-master.yaml
 
 server:
   port: 8080
