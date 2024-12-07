@@ -3,7 +3,6 @@ target/
 log/
 *.iml
 *.iws
-Dockerfile
 /.jpb/
 application-dim.yml
 src/main/resources/application.yaml
