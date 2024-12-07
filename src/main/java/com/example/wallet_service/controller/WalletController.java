@@ -1,9 +1,11 @@
 package com.example.wallet_service.controller;
 
 import com.example.wallet_service.dto.WalletDTO;
+import com.example.wallet_service.service.WalletRateLimiter;
 import com.example.wallet_service.service.WalletService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,14 +22,22 @@ public class WalletController {
 
     private final WalletService walletService;
 
+    private final WalletRateLimiter rateLimiter;
+
     @GetMapping("/{id}")
-    public long getWalletBalance(@PathVariable UUID id) {
-        return walletService.getBalance(id);
+    public ResponseEntity<?> getWalletBalance(@PathVariable UUID id) {
+        if (!rateLimiter.tryConsume(id)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body("Rate limit exceeded");
+        }
+        return ResponseEntity.ok(walletService.getBalance(id));
     }
 
     @PostMapping
-    public WalletDTO updateWallet(@RequestBody WalletDTO request) {
-        return walletService.updateBalance(request);
+    public ResponseEntity<?> updateWallet(@RequestBody WalletDTO request) {
+        if (!rateLimiter.tryConsume(request.getWalletId())) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body("Rate limit exceeded");
+        }
+        return ResponseEntity.ok(walletService.updateBalance(request));
     }
 
 }

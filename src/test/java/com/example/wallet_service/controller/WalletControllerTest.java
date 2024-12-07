@@ -7,11 +7,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -22,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@TestPropertySource(properties = {"app.rps.capacity=1000", "app.rps.refill-tokens=1000", "app.rps.refill-duration=5"})
 class WalletControllerTest {
 
     @Autowired
@@ -54,7 +58,7 @@ class WalletControllerTest {
 
     @Test
     void testUpdateBalance_withdrawSuccess() throws Exception {
-        String jsonBody = """
+        var jsonBody = """
                 {
                     "walletId": "123e4567-e89b-12d3-a456-426614174000",
                     "operationType": "WITHDRAW",
@@ -87,7 +91,7 @@ class WalletControllerTest {
 
     @Test
     void testInsufficientFunds_withdraw() throws Exception {
-        String jsonBody = """
+        var jsonBody = """
                 {
                     "walletId": "123e4567-e89b-12d3-a456-426614174000",
                     "operationType": "WITHDRAW",
@@ -100,5 +104,48 @@ class WalletControllerTest {
                         .content(jsonBody))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string("Insufficient balance"));
+    }
+
+    @Test
+    void testGetBalance_tooManyRequests() throws Exception {
+        var executorService = Executors.newFixedThreadPool(50);
+
+        for (int i = 0; i < 1000; i++) {
+            executorService.submit(() -> {
+                mockMvc.perform(get("/api/v1/wallets/{id}", "123e4567-e89b-12d3-a456-426614174000"))
+                        .andExpect(status().isOk());
+                return null;
+            });
+        }
+        executorService.shutdown();
+        executorService.awaitTermination(2, TimeUnit.MINUTES);
+
+        mockMvc.perform(get("/api/v1/wallets/{id}", "123e4567-e89b-12d3-a456-426614174000"))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void testGetBalance_limitedRequests() throws Exception {
+        var executorService = Executors.newFixedThreadPool(50);
+        var walletIDs = new String[]
+                {
+                        "123e4567-e89b-12d3-a456-426614174000",
+                        "123e4567-e89b-12d3-a456-426614174001",
+                        "123e4567-e89b-12d3-a456-426614174002"
+                };
+        for (var walletID : walletIDs) {
+            for (int i = 0; i < 1000; i++) {
+                executorService.execute(() -> {
+                    try {
+                        mockMvc.perform(get("/api/v1/wallets/{id}", walletID))
+                                .andExpect(status().isOk());
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+            }
+        }
+        executorService.shutdown();
+        executorService.awaitTermination(2, TimeUnit.MINUTES);
     }
 }

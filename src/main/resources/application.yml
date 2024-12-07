@@ -3,18 +3,14 @@ spring:
     url: jdbc:postgresql://localhost:5433/wallet_db
     username: postgres
     password: postgres
-  jpa:
-    hibernate:
-      ddl-auto: update
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
 
-server:
-  port: 8080
+server.port: 8080
+logging.level.root: INFO
 
-logging:
-  level:
-    root: INFO
+app:
+  rps:
+    capacity: 1000
+    refill-tokens: 1000
+    refill-duration: 1
