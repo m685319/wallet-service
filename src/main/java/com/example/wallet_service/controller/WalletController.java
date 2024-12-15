@@ -3,6 +3,7 @@ package com.example.wallet_service.controller;
 import com.example.wallet_service.dto.WalletDTO;
 import com.example.wallet_service.service.WalletRateLimiter;
 import com.example.wallet_service.service.WalletService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,7 +34,7 @@ public class WalletController {
     }
 
     @PostMapping
-    public ResponseEntity<?> updateWallet(@RequestBody WalletDTO request) {
+    public ResponseEntity<?> updateWallet(@Valid @RequestBody WalletDTO request) {
         if (!rateLimiter.tryConsume(request.getWalletId())) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body("Rate limit exceeded");
         }
